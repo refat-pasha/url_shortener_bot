@@ -14,19 +14,18 @@ from telegram.ext import (
 )
 
 # ===============================
-# ENV VARIABLES (FIXED)
+# ENV VARIABLES
 # ===============================
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BASE_URL = os.environ.get("BASE_URL")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN is missing in Railway variables!")
+    raise ValueError("BOT_TOKEN is missing!")
 
 if not BASE_URL:
-    raise ValueError("❌ BASE_URL is missing in Railway variables!")
+    raise ValueError("BASE_URL is missing!")
 
-# Fix Railway postgres format
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
@@ -57,6 +56,13 @@ class URL(db.Model):
 def generate_short_code(length=6):
     chars = string.ascii_letters + string.digits
     return ''.join(random.choice(chars) for _ in range(length))
+
+# ===============================
+# Health Check Route
+# ===============================
+@app.route("/")
+def home():
+    return "Bot is running ✅"
 
 # ===============================
 # Redirect Route
@@ -148,16 +154,18 @@ with app.app_context():
     db.create_all()
 
 # ===============================
-# Set Webhook Automatically
+# Set Webhook on Startup
 # ===============================
-async def set_webhook():
+async def setup_webhook():
     await telegram_app.initialize()
     await telegram_app.bot.set_webhook(f"{BASE_URL}/{BOT_TOKEN}")
 
-asyncio.run(set_webhook())
+@app.before_serving
+def startup():
+    asyncio.run(setup_webhook())
 
 # ===============================
-# Run App
+# Run App (for local only)
 # ===============================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
+    app.run(host="0.0.0.0", port=8080)
