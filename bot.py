@@ -20,6 +20,14 @@ BOT_TOKEN = os.environ.get("8399469149:AAErBol5WHzM_CKkVibo4jzoo4AK8o7qU9A")
 BASE_URL = os.environ.get("urlrefat.up.railway.app")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+if DATABASE_URL:
+    # Fix postgres:// issue if exists
+    if DATABASE_URL.startswith("postgres://"):
+        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+else:
+    # Local fallback database
+    DATABASE_URL = "sqlite:///urls.db"
+
 # Fix postgres:// issue
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
