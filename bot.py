@@ -16,7 +16,7 @@ from telegram.ext import (
 # Environment Variables (Railway)
 # ===============================
 BOT_TOKEN = os.environ.get("8399469149:AAErBol5WHzM_CKkVibo4jzoo4AK8o7qU9A")
-BASE_URL = os.environ.get("BASE_URL")   # https://yourapp.up.railway.app
+BASE_URL = os.environ.get("urlrefat.up.railway.app")   # https://yourapp.up.railway.app
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 # ===============================
