@@ -20,17 +20,12 @@ BOT_TOKEN = os.environ.get("8399469149:AAErBol5WHzM_CKkVibo4jzoo4AK8o7qU9A")
 BASE_URL = os.environ.get("urlrefat.up.railway.app")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
+# Local fallback (SQLite)
 if DATABASE_URL:
-    # Fix postgres:// issue if exists
     if DATABASE_URL.startswith("postgres://"):
         DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 else:
-    # Local fallback database
     DATABASE_URL = "sqlite:///urls.db"
-
-# Fix postgres:// issue
-if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
-    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 # ===============================
 # Flask Setup
@@ -38,7 +33,6 @@ if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
 db = SQLAlchemy(app)
 
 # ===============================
@@ -59,7 +53,7 @@ def generate_short_code(length=6):
     return ''.join(random.choice(chars) for _ in range(length))
 
 # ===============================
-# Redirect
+# Redirect Route
 # ===============================
 @app.route("/<short_code>")
 def redirect_url(short_code):
@@ -77,7 +71,12 @@ def redirect_url(short_code):
 telegram_app = Application.builder().token(BOT_TOKEN).build()
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Send me a URL to shorten.")
+    await update.message.reply_text(
+        "🤖 URL Shortener Bot\n\n"
+        "Send any URL to shorten.\n\n"
+        "Custom alias:\n"
+        "/custom alias https://example.com"
+    )
 
 async def shorten(update: Update, context: ContextTypes.DEFAULT_TYPE):
     original_url = update.message.text.strip()
@@ -97,7 +96,33 @@ async def shorten(update: Update, context: ContextTypes.DEFAULT_TYPE):
     short_link = f"{BASE_URL}/{short_code}"
     await update.message.reply_text(f"🔗 {short_link}")
 
+async def custom(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 2:
+        await update.message.reply_text(
+            "Usage:\n/custom alias https://example.com"
+        )
+        return
+
+    alias = context.args[0]
+    original_url = context.args[1]
+
+    if URL.query.filter_by(short_code=alias).first():
+        await update.message.reply_text("❌ Alias already taken!")
+        return
+
+    new_url = URL(
+        user_id=update.effective_user.id,
+        original_url=original_url,
+        short_code=alias
+    )
+    db.session.add(new_url)
+    db.session.commit()
+
+    short_link = f"{BASE_URL}/{alias}"
+    await update.message.reply_text(f"✅ {short_link}")
+
 telegram_app.add_handler(CommandHandler("start", start))
+telegram_app.add_handler(CommandHandler("custom", custom))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, shorten))
 
 # ===============================
@@ -111,7 +136,7 @@ async def webhook():
     return "ok"
 
 # ===============================
-# Initialize
+# Initialize DB + Webhook
 # ===============================
 with app.app_context():
     db.create_all()
@@ -122,7 +147,7 @@ async def set_webhook():
 asyncio.run(set_webhook())
 
 # ===============================
-# Run
+# Run App
 # ===============================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
