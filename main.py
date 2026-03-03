@@ -14,17 +14,23 @@ from telegram.ext import (
 )
 
 # ===============================
-# ENV VARIABLES
+# ENV VARIABLES (FIXED)
 # ===============================
-BOT_TOKEN = os.environ.get("8399469149:AAEWu_iDba-NpbYZHsr4aZ29qekuoeSLhsk")
-BASE_URL = os.environ.get("urlrefat.up.railway.app")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+BASE_URL = os.environ.get("BASE_URL")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
-# Local fallback (SQLite)
-if DATABASE_URL:
-    if DATABASE_URL.startswith("postgres://"):
-        DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
-else:
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN is missing in Railway variables!")
+
+if not BASE_URL:
+    raise ValueError("❌ BASE_URL is missing in Railway variables!")
+
+# Fix Railway postgres format
+if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+
+if not DATABASE_URL:
     DATABASE_URL = "sqlite:///urls.db"
 
 # ===============================
@@ -136,12 +142,16 @@ async def webhook():
     return "ok"
 
 # ===============================
-# Initialize DB + Webhook
+# Initialize DB
 # ===============================
 with app.app_context():
     db.create_all()
 
+# ===============================
+# Set Webhook Automatically
+# ===============================
 async def set_webhook():
+    await telegram_app.initialize()
     await telegram_app.bot.set_webhook(f"{BASE_URL}/{BOT_TOKEN}")
 
 asyncio.run(set_webhook())
@@ -150,4 +160,4 @@ asyncio.run(set_webhook())
 # Run App
 # ===============================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
