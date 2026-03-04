@@ -2,8 +2,10 @@ import os
 import string
 import random
 import asyncio
+
 from flask import Flask, request, redirect
 from flask_sqlalchemy import SQLAlchemy
+
 from telegram import Update
 from telegram.ext import (
     Application,
@@ -13,36 +15,42 @@ from telegram.ext import (
     filters
 )
 
-# ===============================
+# =========================
 # ENV VARIABLES
-# ===============================
+# =========================
+
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 BASE_URL = os.environ.get("BASE_URL")
 DATABASE_URL = os.environ.get("DATABASE_URL")
 
 if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN is missing!")
+    raise ValueError("BOT_TOKEN missing")
 
 if not BASE_URL:
-    raise ValueError("BASE_URL is missing!")
+    raise ValueError("BASE_URL missing")
 
+# Fix postgres URL for SQLAlchemy
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
 if not DATABASE_URL:
     DATABASE_URL = "sqlite:///urls.db"
 
-# ===============================
+# =========================
 # Flask Setup
-# ===============================
+# =========================
+
 app = Flask(__name__)
+
 app.config["SQLALCHEMY_DATABASE_URI"] = DATABASE_URL
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+
 db = SQLAlchemy(app)
 
-# ===============================
+# =========================
 # Database Model
-# ===============================
+# =========================
+
 class URL(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer)
@@ -50,50 +58,64 @@ class URL(db.Model):
     short_code = db.Column(db.String(50), unique=True)
     clicks = db.Column(db.Integer, default=0)
 
-# ===============================
+# =========================
 # Utility
-# ===============================
+# =========================
+
 def generate_short_code(length=6):
     chars = string.ascii_letters + string.digits
-    return ''.join(random.choice(chars) for _ in range(length))
+    return "".join(random.choice(chars) for _ in range(length))
 
-# ===============================
-# Health Check Route
-# ===============================
+# =========================
+# Health Check
+# =========================
+
 @app.route("/")
 def home():
     return "Bot is running ✅"
 
-# ===============================
+# =========================
 # Redirect Route
-# ===============================
+# =========================
+
 @app.route("/<short_code>")
 def redirect_url(short_code):
+
     url = URL.query.filter_by(short_code=short_code).first()
+
     if not url:
         return "URL not found", 404
 
     url.clicks += 1
     db.session.commit()
+
     return redirect(url.original_url)
 
-# ===============================
+# =========================
 # Telegram Setup
-# ===============================
+# =========================
+
 telegram_app = Application.builder().token(BOT_TOKEN).build()
 
+# =========================
+# Commands
+# =========================
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     await update.message.reply_text(
         "🤖 URL Shortener Bot\n\n"
-        "Send any URL to shorten.\n\n"
+        "Send any URL to shorten\n\n"
         "Custom alias:\n"
         "/custom alias https://example.com"
     )
 
 async def shorten(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     original_url = update.message.text.strip()
 
     short_code = generate_short_code()
+
     while URL.query.filter_by(short_code=short_code).first():
         short_code = generate_short_code()
 
@@ -102,13 +124,16 @@ async def shorten(update: Update, context: ContextTypes.DEFAULT_TYPE):
         original_url=original_url,
         short_code=short_code
     )
+
     db.session.add(new_url)
     db.session.commit()
 
     short_link = f"{BASE_URL}/{short_code}"
+
     await update.message.reply_text(f"🔗 {short_link}")
 
 async def custom(update: Update, context: ContextTypes.DEFAULT_TYPE):
+
     if len(context.args) < 2:
         await update.message.reply_text(
             "Usage:\n/custom alias https://example.com"
@@ -119,7 +144,7 @@ async def custom(update: Update, context: ContextTypes.DEFAULT_TYPE):
     original_url = context.args[1]
 
     if URL.query.filter_by(short_code=alias).first():
-        await update.message.reply_text("❌ Alias already taken!")
+        await update.message.reply_text("❌ Alias already taken")
         return
 
     new_url = URL(
@@ -127,45 +152,61 @@ async def custom(update: Update, context: ContextTypes.DEFAULT_TYPE):
         original_url=original_url,
         short_code=alias
     )
+
     db.session.add(new_url)
     db.session.commit()
 
     short_link = f"{BASE_URL}/{alias}"
+
     await update.message.reply_text(f"✅ {short_link}")
 
+# Register handlers
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("custom", custom))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, shorten))
 
-# ===============================
+# =========================
 # Webhook Route
-# ===============================
+# =========================
+
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
-async def webhook():
+def webhook():
+
     data = request.get_json(force=True)
+
     update = Update.de_json(data, telegram_app.bot)
-    await telegram_app.process_update(update)
+
+    asyncio.run(telegram_app.process_update(update))
+
     return "ok"
 
-# ===============================
-# Initialize DB
-# ===============================
+# =========================
+# Initialize Database
+# =========================
+
 with app.app_context():
     db.create_all()
 
-# ===============================
-# Set Webhook on Startup
-# ===============================
-async def setup_webhook():
+# =========================
+# Set Webhook
+# =========================
+
+async def set_webhook():
+
     await telegram_app.initialize()
-    await telegram_app.bot.set_webhook(f"{BASE_URL}/{BOT_TOKEN}")
 
-@app.before_serving
+    await telegram_app.bot.set_webhook(
+        url=f"{BASE_URL}/{BOT_TOKEN}"
+    )
+
+@app.before_first_request
 def startup():
-    asyncio.run(setup_webhook())
 
-# ===============================
-# Run App (for local only)
-# ===============================
+    asyncio.run(set_webhook())
+
+# =========================
+# Run Local
+# =========================
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
