@@ -29,7 +29,6 @@ if not BOT_TOKEN:
 if not BASE_URL:
     raise ValueError("BASE_URL missing")
 
-# Fix postgres format
 if DATABASE_URL and DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
@@ -92,7 +91,7 @@ def redirect_url(short_code):
     return redirect(url.original_url)
 
 # =========================
-# Telegram Application
+# Telegram Bot Setup
 # =========================
 
 telegram_app = Application.builder().token(BOT_TOKEN).build()
@@ -105,7 +104,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "🤖 URL Shortener Bot\n\n"
-        "Send any URL to shorten.\n\n"
+        "Send any URL to shorten\n\n"
         "Custom alias:\n"
         "/custom alias https://example.com"
     )
@@ -160,7 +159,6 @@ async def custom(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(f"✅ {short_link}")
 
-# Register handlers
 telegram_app.add_handler(CommandHandler("start", start))
 telegram_app.add_handler(CommandHandler("custom", custom))
 telegram_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, shorten))
@@ -193,7 +191,7 @@ with app.app_context():
     db.create_all()
 
 # =========================
-# Set Webhook Automatically
+# Set Webhook (RUN ON START)
 # =========================
 
 async def set_webhook():
@@ -204,9 +202,8 @@ async def set_webhook():
         url=f"{BASE_URL}/{BOT_TOKEN}"
     )
 
-@app.before_first_request
-def startup():
-    asyncio.run(set_webhook())
+# Run webhook setup
+asyncio.run(set_webhook())
 
 # =========================
 # Local Run
